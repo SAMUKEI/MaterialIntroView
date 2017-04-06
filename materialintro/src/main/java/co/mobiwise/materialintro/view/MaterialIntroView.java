@@ -11,6 +11,8 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.os.Build;
 import android.os.Handler;
+import android.support.annotation.ArrayRes;
+import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -22,6 +24,9 @@ import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import co.mobiwise.materialintro.MaterialIntroConfiguration;
 import co.mobiwise.materialintro.R;
@@ -79,7 +84,7 @@ public class MaterialIntroView extends RelativeLayout {
      * targetShape focus on target
      * and clear circle to focus
      */
-    private Shape targetShape;
+    private List<Shape> targetShapes = new ArrayList<Shape>();
 
     /**
      * Focus Type
@@ -94,7 +99,7 @@ public class MaterialIntroView extends RelativeLayout {
     /**
      * Target View
      */
-    private Target targetView;
+    private List<Target> targetViews = new ArrayList<Target>();
 
     /**
      * Eraser
@@ -279,11 +284,7 @@ public class MaterialIntroView extends RelativeLayout {
         eraser.setFlags(Paint.ANTI_ALIAS_FLAG);
 
         View layoutInfo = LayoutInflater.from(getContext()).inflate(R.layout.material_intro_card, null);
-
-        infoView = layoutInfo.findViewById(R.id.info_layout);
-        textViewInfo = (TextView) layoutInfo.findViewById(R.id.textview_info);
-        textViewInfo.setTextColor(colorTextViewInfo);
-        imageViewIcon = (ImageView) layoutInfo.findViewById(R.id.imageview_icon);
+        initInfoLayout(layoutInfo);
 
         dotView = LayoutInflater.from(getContext()).inflate(R.layout.dotview, null);
         dotView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
@@ -291,13 +292,15 @@ public class MaterialIntroView extends RelativeLayout {
         getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
-                targetShape.reCalculateAll();
-                if (targetShape != null && targetShape.getPoint().y != 0 && !isLayoutCompleted) {
-                    if (isInfoEnabled)
-                        setInfoLayout();
-                    if(isDotViewEnabled)
-                        setDotViewLayout();
-                    removeOnGlobalLayoutListener(MaterialIntroView.this, this);
+                for(Shape targetShape : targetShapes) {
+                    targetShape.reCalculateAll();
+                    if (targetShape != null && targetShape.getPoint().y != 0 && !isLayoutCompleted) {
+                        if (isInfoEnabled)
+                            setInfoLayout();
+                        if (isDotViewEnabled)
+                            setDotViewLayout();
+                        removeOnGlobalLayoutListener(MaterialIntroView.this, this);
+                    }
                 }
             }
         });
@@ -343,7 +346,9 @@ public class MaterialIntroView extends RelativeLayout {
         /**
          * Clear focus area
          */
-        targetShape.draw(this.canvas, eraser, padding);
+        for(Shape targetShape : targetShapes) {
+            targetShape.draw(this.canvas, eraser, padding);
+        }
 
         canvas.drawBitmap(bitmap, 0, 0, null);
     }
@@ -360,35 +365,40 @@ public class MaterialIntroView extends RelativeLayout {
         float xT = event.getX();
         float yT = event.getY();
 
-        boolean isTouchOnFocus = targetShape.isTouchOnFocus(xT, yT);
+        int index = 0;
+        for(Shape targetShape : targetShapes) {
+            boolean isTouchOnFocus = targetShape.isTouchOnFocus(xT, yT);
+            Target targetView = targetViews.get(index);
 
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
 
-                if (isTouchOnFocus && isPerformClick) {
-                    targetView.getView().setPressed(true);
-                    targetView.getView().invalidate();
-                }
+                    if (isTouchOnFocus && isPerformClick) {
+                        targetView.getView().setPressed(true);
+                        targetView.getView().invalidate();
+                    }
 
-                return true;
-            case MotionEvent.ACTION_UP:
+                    return true;
+                case MotionEvent.ACTION_UP:
 
-                if (isTouchOnFocus || dismissOnTouch)
-                    dismiss();
+                    if (isTouchOnFocus || dismissOnTouch)
+                        dismiss();
 
-                if (isTouchOnFocus && isPerformClick) {
-                    targetView.getView().performClick();
-                    targetView.getView().setPressed(true);
-                    targetView.getView().invalidate();
-                    targetView.getView().setPressed(false);
-                    targetView.getView().invalidate();
-                }
+                    if (isTouchOnFocus && isPerformClick) {
+                        targetView.getView().performClick();
+                        targetView.getView().setPressed(true);
+                        targetView.getView().invalidate();
+                        targetView.getView().setPressed(false);
+                        targetView.getView().invalidate();
+                    }
 
-                return true;
-            default:
-                break;
+                    return true;
+                default:
+                    break;
+            }
+
+            index ++;
         }
-
         return super.onTouchEvent(event);
     }
 
@@ -452,6 +462,13 @@ public class MaterialIntroView extends RelativeLayout {
             ((ViewGroup) getParent()).removeView(this);
     }
 
+    private void initInfoLayout(View layoutInfo) {
+        infoView = layoutInfo.findViewById(R.id.info_layout);
+        textViewInfo = (TextView) layoutInfo.findViewById(R.id.textview_info);
+        textViewInfo.setTextColor(colorTextViewInfo);
+        imageViewIcon = (ImageView) layoutInfo.findViewById(R.id.imageview_icon);
+    }
+
     /**
      * locate info card view above/below the
      * circle. If circle's Y coordiante is bigger than
@@ -471,6 +488,9 @@ public class MaterialIntroView extends RelativeLayout {
                 RelativeLayout.LayoutParams infoDialogParams = new RelativeLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.FILL_PARENT);
+
+                // FIXME: NOT multiple support
+                Shape targetShape = targetShapes.get(0);
 
                 if (targetShape.getPoint().y < height / 2) {
                     ((RelativeLayout) infoView).setGravity(Gravity.TOP);
@@ -510,6 +530,9 @@ public class MaterialIntroView extends RelativeLayout {
 
                 if (dotView.getParent() != null)
                     ((ViewGroup) dotView.getParent()).removeView(dotView);
+
+                // FIXME: NOT multiple support
+                Shape targetShape = targetShapes.get(0);
 
                 RelativeLayout.LayoutParams dotViewLayoutParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
                 dotViewLayoutParams.height = Utils.dpToPx(Constants.DEFAULT_DOT_SIZE);
@@ -553,16 +576,16 @@ public class MaterialIntroView extends RelativeLayout {
         this.isReady = isReady;
     }
 
-    private void setTarget(Target target) {
-        targetView = target;
+    private void addTarget(Target target) {
+        targetViews.add(target);
     }
 
     private void setFocusType(Focus focusType) {
         this.focusType = focusType;
     }
 
-    private void setShape(Shape shape) {
-        this.targetShape = shape;
+    private void addShape(Shape shape) {
+        targetShapes.add(shape);
     }
 
     private void setPadding(int padding) {
@@ -645,8 +668,23 @@ public class MaterialIntroView extends RelativeLayout {
         private Focus focusType = Focus.MINIMUM;
 
         public Builder(Activity activity) {
+            this(activity, null);
+        }
+
+        /**
+         * @param activity Activity
+         * @param layoutInfo display infomation View
+         * require items
+         *   @id+/info_layout: Layout
+         *   @id+/textview_info: TextView
+         *   @id+/imageview_icon: ImageView
+         */
+        public Builder(Activity activity, @Nullable View layoutInfo) {
             this.activity = activity;
             materialIntroView = new MaterialIntroView(activity);
+            if ( layoutInfo != null ) {
+                materialIntroView.initInfoLayout(layoutInfo);
+            }
         }
 
         public Builder setMaskColor(int maskColor) {
@@ -680,7 +718,7 @@ public class MaterialIntroView extends RelativeLayout {
         }
 
         public Builder setTarget(View view) {
-            materialIntroView.setTarget(new ViewTarget(view));
+            materialIntroView.addTarget(new ViewTarget(view));
             return this;
         }
 
@@ -742,7 +780,7 @@ public class MaterialIntroView extends RelativeLayout {
 
         public Builder setCustomShape(Shape shape) {
             materialIntroView.usesCustomShape = true;
-            materialIntroView.setShape(shape);
+            materialIntroView.addShape(shape);
             return this;
         }
 
@@ -757,23 +795,23 @@ public class MaterialIntroView extends RelativeLayout {
             }
 
             // no custom shape supplied, build our own
-            Shape shape;
-
-            if(materialIntroView.shapeType == ShapeType.CIRCLE) {
-                shape = new Circle(
-                        materialIntroView.targetView,
-                        materialIntroView.focusType,
-                        materialIntroView.focusGravity,
-                        materialIntroView.padding);
-            } else {
-                shape = new Rect(
-                        materialIntroView.targetView,
-                        materialIntroView.focusType,
-                        materialIntroView.focusGravity,
-                        materialIntroView.padding);
+            for(Target targetView : materialIntroView.targetViews) {
+                Shape shape;
+                if (materialIntroView.shapeType == ShapeType.CIRCLE) {
+                    shape = new Circle(
+                            targetView,
+                            materialIntroView.focusType,
+                            materialIntroView.focusGravity,
+                            materialIntroView.padding);
+                } else {
+                    shape = new Rect(
+                            targetView,
+                            materialIntroView.focusType,
+                            materialIntroView.focusGravity,
+                            materialIntroView.padding);
+                }
+                materialIntroView.addShape(shape);
             }
-
-            materialIntroView.setShape(shape);
             return materialIntroView;
         }
 
